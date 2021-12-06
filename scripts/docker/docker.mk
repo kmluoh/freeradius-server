@@ -40,6 +40,12 @@ DOCKER_REPO := freeradius
 #  Registry to push to
 DOCKER_REGISTRY :=
 #
+#  Platforms to build
+DOCKER_IMAGE_PLATFORMS := linux/amd64,linux/arm64
+#
+#  Buildx args, most likely "--platform"
+DOCKER_BUILDX_ARGS := --platform $(DOCKER_IMAGE_PLATFORMS)
+#
 
 ifneq "$(DOCKER_REPO)" ""
 	override DOCKER_REPO := $(DOCKER_REPO)/
@@ -56,20 +62,21 @@ docker:
 	$(Q)docker build $(DOCKER_BUILD_ARGS) scripts/docker/ubuntu18 --build-arg=release=$(DOCKER_COMMIT) -t $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION)
 	$(Q)docker build $(DOCKER_BUILD_ARGS) scripts/docker/alpine --build-arg=release=$(DOCKER_COMMIT) -t $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION)-alpine
 
-.PHONY: docker-push
-docker-push: docker
-	$(Q)docker push $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION)
-	$(Q)docker push $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION)-alpine
+.PHONY: docker-x
+docker-x:
+	@echo Building multi-platform $(DOCKER_COMMIT)
+	$(Q)docker buildx build $(DOCKER_BUILDX_ARGS) $(DOCKER_BUILD_ARGS) scripts/docker/ubuntu18 --build-arg=release=$(DOCKER_COMMIT)
+	$(Q)docker buildx build $(DOCKER_BUILDX_ARGS) $(DOCKER_BUILD_ARGS) scripts/docker/alpine --build-arg=release=$(DOCKER_COMMIT)
 
-.PHONY: docker-tag-latest
-docker-tag-latest: docker
-	$(Q)docker tag $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION) $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):latest
-	$(Q)docker tag $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION)-alpine $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):latest-alpine
+.PHONY: docker-x-push
+docker-x-push: docker-x
+	$(Q)docker buildx build $(DOCKER_BUILDX_ARGS) $(DOCKER_BUILD_ARGS) scripts/docker/ubuntu18 --build-arg=release=$(DOCKER_COMMIT) -t $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION) -o type=registry
+	$(Q)docker buildx build $(DOCKER_BUILDX_ARGS) $(DOCKER_BUILD_ARGS) scripts/docker/alpine --build-arg=release=$(DOCKER_COMMIT) -t $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):$(DOCKER_VERSION)-alpine -o type=registry
 
-.PHONY: docker-push-latest
-docker-push-latest: docker-push docker-tag-latest
-	$(Q)docker push $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):latest
-	$(Q)docker push $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):latest-alpine
+.PHONY: docker-x-push-latest
+docker-x-push-latest: docker-x-push
+	$(Q)docker buildx build $(DOCKER_BUILDX_ARGS) $(DOCKER_BUILD_ARGS) scripts/docker/ubuntu18 --build-arg=release=$(DOCKER_COMMIT) -t $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):latest -o type=registry
+	$(Q)docker buildx build $(DOCKER_BUILDX_ARGS) $(DOCKER_BUILD_ARGS) scripts/docker/alpine --build-arg=release=$(DOCKER_COMMIT) -t $(DOCKER_REGISTRY)$(DOCKER_REPO)$(DOCKER_TAG):latest-alpine -o type=registry
 
-.PHONY: docker-publish
-docker-publish: docker-push-latest
+.PHONY: docker-x-publish
+docker-x-publish: docker-x-push-latest
